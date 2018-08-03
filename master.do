@@ -16,7 +16,8 @@ do do/test
 // }
 
 do do/crime_hs_near
-
+crime_hs_near, operation(sum)
+crime_hs_near, operation(mean)
 ***
 
 

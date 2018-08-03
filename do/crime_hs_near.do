@@ -1,4 +1,8 @@
+cap program drop crime_hs_near 
+program define crime_hs_near 
+syntax, OPERATION(name)
 clear
+clear mata
 set maxvar 20000
 
 *********************************
@@ -12,7 +16,7 @@ use tmp/ready_sim_loop, clear
 *********************************
 * Set maximum repetitions *******
 *********************************
-local maxrep = 1
+local maxrep = 1000
 
 
 ***********************************
@@ -20,19 +24,22 @@ local maxrep = 1
 ***********************************
 
 display "****** Repetitions in the for loop ***********"
-
+quietly drop if id == objectid
 forvalues i = 1/`maxrep' {
 /* The goal here is to make a variable 
 for baseline crime only for hotspots. 
 We will use this as the total exposure 
 of crime near you. 
 */
-	gen sp250_crime_hsp_`i' = log_crime_all_u if assign_hsp_`i' == 1 & ///
+	qui gen sp250_crime_hsp_`i' = bl_crime_non_std if assign_hsp_`i' == 1 & ///
 		all_assign_hsp_`i' == 2
 	
-	gen sp250_crime_bw_`i' = log_crime_all_u if assign_bw_`i' == 1 & ///
+	qui gen sp250_crime_bw_`i' = bl_crime_non_std if assign_bw_`i' == 1 & ///
 		all_assign_bw_`i' == 2
 	
+	qui gen sp250_crime_hsp_bw_`i' = bl_crime_non_std if assign_hsp_`i' == 1 & /// 
+		assign_bw_`i' == 1 & all_assign_hsp_`i' == 2 & all_assign_bw_`i' == 2
+
 }
 
 ****************************************** 
@@ -47,7 +54,7 @@ rename id objectid
 
 
 dis "************* Collapsing ************"
-fcollapse (sum) sp250*, by(objectid)
+fcollapse (`operation') sp250*, by(objectid)
 
 
 *********************************************
@@ -58,10 +65,88 @@ quietly merge 1:1 objectid using in_data/treat_status, keepusing(objectid) nogen
 ****************************************************
 * Replase observations with missing ***************
 ****************************************************
+forvalues i = 1/`maxrep' {
+	qui replace sp250_crime_hsp_`i' = 0 if missing(sp250_crime_hsp_`i')
+	qui replace sp250_crime_bw_`i' = 0 if missing(sp250_crime_bw_`i')
+	qui replace sp250_crime_hsp_bw_`i' = 0 if missing(sp250_crime_hsp_bw_`i')
+}
+
+
+**********************************************************
+* Find expected values ***********************************
+***********************************************************
+// get locals for rowmeans 
+local hsp_vars
+local bw_vars
+local hsp_bw_vars
+forvalues i = 1/`maxrep' {
+	local hsp_vars `hsp_vars' sp250_crime_hsp_`i'
+	local bw_vars `bw_vars' sp250_crime_bw_`i'
+	local hsp_bw_vars `hsp_bw_vars' sp250_crime_hsp_bw_`i'
+}
+
+egen e_sp250_crime_hsp = rowmean(`hsp_vars')
+egen e_sp250_crime_bw = rowmean(`bw_vars')
+egen e_sp250_crime_hsp_bw = rowmean(`hsp_bw_vars')
+
+save out_data/crime_near_hs_sims_`operation', replace
+
+************************************************************
+* Save a temp file of just the expected value **************
+***********************************************************
+keep objectid e_*
+tempfile expected_values
+save `expected_values'
+
+
+use tmp/ready_real_data, clear
+quietly drop if id == objectid 
+
+qui gen sp250_crime_hsp = bl_crime_non_std if treat_hsp == 1 & all_sp250_hsp  == 1
+qui gen sp250_crime_bw = bl_crime_non_std if treat_bw == 1 & all_sp250_bw  == 1
+qui gen sp250_crime_hsp_bw = bl_crime_non_std if treat_bw == 1 & treat_hsp == 1 & ///
+	all_sp250_hsp == 1 & all_sp250_bw == 1
+
+*********************************************************
+* Keep just the spillover variables we just created *****
+*********************************************************
+keep id ///
+sp250_crime_hsp ///
+sp250_crime_bw ///
+sp250_crime_hsp_bw 
+
+* Rename the id variable
+rename id objectid 
+
+
+***********************************************************
+* Perform the collapse *************************************
+***********************************************************
+fcollapse (`operation') sp250*, by(objectid)
 
 
 
 
+*************************************************************
+* Merge in the rest of the street segments ******************
+*************************************************************
+quietly merge 1:1 objectid using in_data/treat_status, keepusing(objectid) nogen
+
+*************************************************************
+* Replace observations with missing *************************
+*************************************************************
+foreach var of varlist sp250* {
+	quietly replace `var' = 0 if missing(`var')
+}
+
+******************************************************************
+* Merge in the expected values ***********************************
+****************************************************************
+merge 1:1 objectid using `expected_values', nogen 
+
+save out_data/crime_near_hs_real_`operation', replace
+
+end
 
 
-
+***
