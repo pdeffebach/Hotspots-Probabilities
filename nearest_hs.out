@@ -120,96 +120,126 @@ end of do-file
 >                 assign_bw_`i' == 1 & all_assign_hsp_`i' == 2 & all_assign_bw_
 > `i' == 2
  13. 
-. }
- 14. 
+.         qui gen n_sp250_hsp_`i' = (assign_hsp_`i' == 1) if ///
+>                 all_assign_hsp_`i' == 2
+ 14.         
+.         qui gen n_sp250_bw_`i' = (assign_hsp_`i' == 1) if ///
+>                 all_assign_bw_`i' == 2
+ 15.         
+.         qui gen n_sp250_hsp_bw_`i' = (assign_hsp_`i' == 1 & assign_hsp_`i' ==
+>  1) if ///
+>                 all_assign_hsp_`i' == 2 & all_assign_bw_`i' == 2
+ 16. }
+ 17. 
 . ****************************************** 
 . * Perform the collapse *******************
 . ******************************************
 . // keep just the variables we want
-. keep id sp250_crime*
- 15. 
+. keep id sp250_crime* n_sp250*
+ 18. 
 . // rename id to objectid 
 . // so we can merge data from other datasets in
 . rename id objectid
- 16. 
+ 19. 
 . 
 . dis "************* Collapsing ************"
- 17. fcollapse (`operation') sp250*, by(objectid)
- 18. 
+ 20. fcollapse (`operation') sp250* (sum) n_sp250*, by(objectid)
+ 21. 
 . 
 . *********************************************
 . * Merge in with other observations that are not spillovers 
 . *********************************************
 . quietly merge 1:1 objectid using in_data/treat_status, keepusing(objectid) no
 > gen
- 19. 
+ 22. 
 . ****************************************************
 . * Replase observations with missing ***************
 . ****************************************************
 . forvalues i = 1/`maxrep' {
- 20.         qui replace sp250_crime_hsp_`i' = 0 if missing(sp250_crime_hsp_`i'
+ 23.         qui replace sp250_crime_hsp_`i' = 0 if missing(sp250_crime_hsp_`i'
 > )
- 21.         qui replace sp250_crime_bw_`i' = 0 if missing(sp250_crime_bw_`i')
- 22.         qui replace sp250_crime_hsp_bw_`i' = 0 if missing(sp250_crime_hsp_
+ 24.         qui replace sp250_crime_bw_`i' = 0 if missing(sp250_crime_bw_`i')
+ 25.         qui replace sp250_crime_hsp_bw_`i' = 0 if missing(sp250_crime_hsp_
 > bw_`i')
- 23. }
- 24. 
+ 26.         qui replace n_sp250_hsp_`i' = 0 if missing(n_sp250_hsp_`i')
+ 27.         qui replace n_sp250_bw_`i' = 0 if missing(n_sp250_bw_`i')
+ 28.         qui replace n_sp250_hsp_bw_`i' = 0 if missing(n_sp250_hsp_bw_`i')
+ 29. }
+ 30. 
 . 
 . **********************************************************
 . * Find expected values ***********************************
 . ***********************************************************
 . // get locals for rowmeans 
 . local hsp_vars
- 25. local bw_vars
- 26. local hsp_bw_vars
- 27. forvalues i = 1/`maxrep' {
- 28.         local hsp_vars `hsp_vars' sp250_crime_hsp_`i'
- 29.         local bw_vars `bw_vars' sp250_crime_bw_`i'
- 30.         local hsp_bw_vars `hsp_bw_vars' sp250_crime_hsp_bw_`i'
- 31. }
- 32. 
+ 31. local bw_vars
+ 32. local hsp_bw_vars
+ 33. local n_hsp_vars
+ 34. local n_bw_vars
+ 35. local n_hsp_bw_vars
+ 36. forvalues i = 1/`maxrep' {
+ 37.         local hsp_vars `hsp_vars' sp250_crime_hsp_`i'
+ 38.         local bw_vars `bw_vars' sp250_crime_bw_`i'
+ 39.         local hsp_bw_vars `hsp_bw_vars' sp250_crime_hsp_bw_`i'
+ 40.         local n_hsp_vars `n_hsp_vars' n_sp250_hsp_`i'
+ 41.         local n_bw_vars `n_bw_vars' n_sp250_bw_`i'
+ 42.         local n_hsp_bw_vars `n_hsp_bw_vars' n_sp250_hsp_bw_`i'
+ 43. }
+ 44. 
 . egen e_sp250_crime_hsp = rowmean(`hsp_vars')
- 33. egen e_sp250_crime_bw = rowmean(`bw_vars')
- 34. egen e_sp250_crime_hsp_bw = rowmean(`hsp_bw_vars')
- 35. 
+ 45. egen e_sp250_crime_bw = rowmean(`bw_vars')
+ 46. egen e_sp250_crime_hsp_bw = rowmean(`hsp_bw_vars')
+ 47. egen e_n_sp250_hsp = rowmean(`n_hsp_vars')
+ 48. egen e_n_sp250_bw = rowmean(`n_bw_vars')
+ 49. egen e_n_sp250_hsp_bw = rowmean(`n_hsp_bw_vars')
+ 50. 
+. 
+. 
 . save out_data/crime_near_hs_sims_`operation', replace
- 36. 
+ 51. 
 . ************************************************************
 . * Save a temp file of just the expected value **************
 . ***********************************************************
 . keep objectid e_*
- 37. tempfile expected_values
- 38. save `expected_values'
- 39. 
+ 52. tempfile expected_values
+ 53. save `expected_values'
+ 54. 
 . 
 . use tmp/ready_real_data, clear
- 40. quietly drop if id == objectid 
- 41. 
+ 55. quietly drop if id == objectid 
+ 56. 
 . qui gen sp250_crime_hsp = bl_crime_non_std if treat_hsp == 1 & all_sp250_hsp 
 >  == 1
- 42. qui gen sp250_crime_bw = bl_crime_non_std if treat_bw == 1 & all_sp250_bw 
+ 57. qui gen sp250_crime_bw = bl_crime_non_std if treat_bw == 1 & all_sp250_bw 
 >  == 1
- 43. qui gen sp250_crime_hsp_bw = bl_crime_non_std if treat_bw == 1 & treat_hsp
+ 58. qui gen sp250_crime_hsp_bw = bl_crime_non_std if treat_bw == 1 & treat_hsp
 >  == 1 & ///
 >         all_sp250_hsp == 1 & all_sp250_bw == 1
- 44. 
+ 59. qui gen n_sp250_hsp = (treat_hsp == 1) if all_sp250_hsp == 1 
+ 60. qui gen n_sp250_bw = (treat_bw == 1) if all_sp250_bw == 1
+ 61. qui gen n_sp250_hsp_bw = (treat_hsp == 1 & treat_bw == 1) if ///
+>         all_sp250_hsp == 1 & all_sp250_bw == 1
+ 62. 
 . *********************************************************
 . * Keep just the spillover variables we just created *****
 . *********************************************************
 . keep id ///
 > sp250_crime_hsp ///
 > sp250_crime_bw ///
-> sp250_crime_hsp_bw 
- 45. 
-. * Rename the id variable
+> sp250_crime_hsp_bw ///
+> n_sp250_hsp ///
+> n_sp250_bw ///
+> n_sp250_hsp_bw ///
+> 
+ 63. * Rename the id variable
 . rename id objectid 
- 46. 
+ 64. 
 . 
 . ***********************************************************
 . * Perform the collapse *************************************
 . ***********************************************************
-. fcollapse (`operation') sp250*, by(objectid)
- 47. 
+. fcollapse (`operation') sp250* (sum) n_* , by(objectid)
+ 65. 
 . 
 . 
 . 
@@ -218,21 +248,21 @@ end of do-file
 . *************************************************************
 . quietly merge 1:1 objectid using in_data/treat_status, keepusing(objectid) no
 > gen
- 48. 
+ 66. 
 . *************************************************************
 . * Replace observations with missing *************************
 . *************************************************************
-. foreach var of varlist sp250* {
- 49.         quietly replace `var' = 0 if missing(`var')
- 50. }
- 51. 
+. foreach var of varlist sp250* n_* {
+ 67.         quietly replace `var' = 0 if missing(`var')
+ 68. }
+ 69. 
 . ******************************************************************
 . * Merge in the expected values ***********************************
 . ****************************************************************
 . merge 1:1 objectid using `expected_values', nogen 
- 52. 
+ 70. 
 . save out_data/crime_near_hs_real_`operation', replace
- 53. 
+ 71. 
 . end
 
 . 
@@ -246,7 +276,7 @@ end of do-file
 ****** Repetitions in the for loop ***********
 ************* Collapsing ************
 file out_data/crime_near_hs_sims_sum.dta saved
-file /tmp/St07376.000002 saved
+file /tmp/St37935.000002 saved
 
     Result                           # of obs.
     -----------------------------------------
@@ -260,7 +290,7 @@ file out_data/crime_near_hs_real_sum.dta saved
 ****** Repetitions in the for loop ***********
 ************* Collapsing ************
 file out_data/crime_near_hs_sims_mean.dta saved
-file /tmp/St07376.000001 saved
+file /tmp/St37935.000001 saved
 
     Result                           # of obs.
     -----------------------------------------
